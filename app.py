@@ -4,7 +4,7 @@ from openai import OpenAI
 import os
 
 # Streamlit app title
-st.title("PDF Translator")
+st.title("Pilot AI Translator App")
 
 # User password for page protection
 def check_password():

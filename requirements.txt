@@ -5,4 +5,5 @@ python-docx==1.1.0
 python-pptx==0.6.23
 textract==1.6.5
 tenacity==8.2.3
+python-six== 1.16
 

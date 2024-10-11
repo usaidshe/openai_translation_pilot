@@ -175,7 +175,9 @@ def evaluate_text(client: OpenAI, unit_text: str, back_translated_text: str) -> 
     user_text_evaluate = f"""
 # Instructions
 
-Compare the following two texts and evaluate the differences in meaning, tone, or content.
+Below I have an original text in English, and a back translated text in English. Provide the following: 
+- A bulleted list that briefly details how accurate the back translation is on tone, voice, style, word choice (1 bullet for each of these)
+- Rewrite the original text and add bolding where the back translation uses a different word
 
 # Original Text:
 

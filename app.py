@@ -7,7 +7,6 @@ from docx import Document
 from docx.shared import Pt
 import io
 from pptx import Presentation
-# import textract  # For .doc and .ppt files
 import tempfile
 from typing import List, Tuple
 import subprocess
@@ -74,38 +73,6 @@ def extract_text_from_pptx(file_stream) -> List[Tuple[int, str]]:
             slides.append((slide_num, slide_text))
     return slides
 
-# Updated extract_text_from_doc function
-# def extract_text_from_doc(file_stream) -> List[Tuple[int, str]]:
-#     """Extract text from DOC using textract, return list of (page_num, text)"""
-#     with tempfile.NamedTemporaryFile(delete=False, suffix=".doc") as tmp:
-#         tmp.write(file_stream.read())
-#         tmp_path = tmp.name
-#     try:
-#         raw_text = textract.process(tmp_path).decode('utf-8')
-        
-#         # Split the text by manual page breaks
-#         pages = raw_text.split('\f')  # \f is the form feed character representing a page break
-        
-#         # If no manual page breaks are found, use a heuristic to divide text
-#         if len(pages) == 1:
-#             paragraphs = raw_text.split('\n\n')  # Assuming paragraphs are separated by double newlines
-#             pages = []
-#             page_text = []
-#             for para in paragraphs:
-#                 page_text.append(para.strip())
-#                 # Heuristic: Assume a new page starts after a certain number of paragraphs
-#                 if len(page_text) >= 10:  # Adjust this number based on typical page length
-#                     pages.append('\n\n'.join(page_text))
-#                     page_text = []
-#             if page_text:
-#                 pages.append('\n\n'.join(page_text))
-        
-#         # Create a list of (page_num, text) tuples
-#         page_texts = [(i + 1, page.strip()) for i, page in enumerate(pages) if page.strip()]
-#         return page_texts
-#     finally:
-#         os.remove(tmp_path)
-
 def extract_text(uploaded_file) -> Tuple[str, List[Tuple[int, str]]]:
     """Determine file type and extract text accordingly, return file type and list of (unit_num, text)"""
     file_extension = os.path.splitext(uploaded_file.name)[1].lower()
@@ -113,8 +80,6 @@ def extract_text(uploaded_file) -> Tuple[str, List[Tuple[int, str]]]:
         return ("PDF", extract_text_from_pdf(uploaded_file))
     elif file_extension == ".docx":
         return ("DOCX", extract_text_from_docx(uploaded_file))
-    # elif file_extension == ".doc":
-    #     return ("DOC", extract_text_from_doc(uploaded_file))
     elif file_extension == ".pptx":
         return ("PPTX", extract_text_from_pptx(uploaded_file))
     else:
@@ -256,9 +221,6 @@ def main():
                 st.write("# Step 3: Compare Original + Back Translations")
                 evaluations = parallel_process_openai_chatbot(client, system_text_evaluate, user_contents_evaluate)
 
-                # st.write(system_text_evaluate)
-                # st.write(user_contents_evaluate)
-
                 # Initialize Word Document
                 docx_document = Document()
                 docx_document.add_heading("Document Translation Report", 0)
@@ -267,15 +229,8 @@ def main():
                 docx_document.add_paragraph(f"Processed File Type: {file_type}")
                 docx_document.add_page_break()
 
-                # Progress bar
-                # progress_bar = st.progress(0)
-                # progress_text = st.empty()
-
                 # Loop through each unit and process
                 for idx, (unit_num, unit_text) in enumerate(units, start=1):
-                    # progress = idx / len(units)
-                    # progress_bar.progress(progress)
-                    # progress_text.text(f"Processing unit {idx} of {len(units)}...")
 
                     # Add unit heading
                     if file_type in ["PDF", "DOC", "DOCX"]:
@@ -284,11 +239,6 @@ def main():
                         unit_heading = f"Slide {unit_num}"
                     else:
                         unit_heading = f"Unit {unit_num}"
-
-                    # st.subheader(f"{unit_heading} of {len(units)}")
-                    # st.markdown("**Original Text:**")
-                    # with st.expander("Original Text"):
-                    #     st.text(unit_text)
 
                     # Sanitize the text before adding it to the document
                     sanitized_unit_text = sanitize_text(unit_text)
@@ -300,18 +250,21 @@ def main():
 
                     # Display and add Translated Text
                     translated_text = translated_texts[idx - 1]  # Use precomputed translated text
+                    sanitized_translated_text = sanitize_text(translated_text)
                     docx_document.add_heading("Translated Text:", level=3)
-                    add_markdown_paragraph(docx_document, translated_text)
+                    add_markdown_paragraph(docx_document, sanitized_translated_text)
 
                     # Display and add Back Translated Text
                     back_translated_text = back_translated_texts[idx - 1]  # Use precomputed back-translated text
+                    sanitized_back_translated_text = sanitize_text(back_translated_text)
                     docx_document.add_heading("Back Translated Text:", level=3)
-                    add_markdown_paragraph(docx_document, back_translated_text)
+                    add_markdown_paragraph(docx_document, sanitized_back_translated_text)
 
                     # Display and add Evaluation
                     evaluation = evaluations[idx - 1]  # Use precomputed evaluation
+                    sanitized_evaluation = sanitize_text(evaluation)
                     docx_document.add_heading("Evaluation of Differences:", level=3)
-                    add_markdown_paragraph(docx_document, evaluation)
+                    add_markdown_paragraph(docx_document, sanitized_evaluation)
 
                     docx_document.add_page_break()  # Add a page break after each unit's content
 
@@ -330,84 +283,5 @@ def main():
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
 
-                # Reset progress bar
-                # progress_bar.empty()
-                # progress_text.empty()
-
 if __name__ == "__main__":
     main()
-
-
-
-# def translate_text(client: OpenAI, language: str, unit_text: str) -> str:
-#     """Translate the given text to the specified language"""
-#     system_text_translate = f"You are an expert at translating languages. Translate the text into {language}."
-#     user_text_translate = f"""
-# # Instructions
-
-# Translate the below text to {language}.
-
-# # Text: 
-
-# {unit_text}
-# """
-#     response_translate = client.chat.completions.create(
-#         model="gpt-4o",
-#         messages=[
-#             {"role": "system", "content": system_text_translate},
-#             {"role": "user", "content": user_text_translate},
-#         ],
-#         max_tokens=4096,
-#         temperature=0.3,
-#     )
-#     return response_translate.choices[0].message.content.strip()
-
-# def back_translate_text(client: OpenAI, translated_text: str) -> str:
-#     """Translate the given text back to English"""
-#     system_text_back_translate = "You are an expert at translating languages. A user will provide text in a foreign language, and you will translate it back to English."
-#     user_text_back_translate = f"""
-# # Instructions
-
-# Translate the below text back to English.
-
-# # Text: 
-
-# {translated_text}
-# """
-#     response_back_translate = client.chat.completions.create(
-#         model="gpt-4o",
-#         messages=[
-#             {"role": "system", "content": system_text_back_translate},
-#             {"role": "user", "content": user_text_back_translate},
-#         ],
-#         max_tokens=4096,
-#         temperature=0.3,
-#     )
-#     return response_back_translate.choices[0].message.content.strip()
-
-# def evaluate_text(client: OpenAI, unit_text: str, back_translated_text: str) -> str:
-#     """Evaluate the differences between the original and back-translated text"""
-#     system_text_evaluate = """
-# Below I have an original text in English, and a back translated text in English. Provide the following: 
-# - A bulleted list that briefly details how accurate the back translation is on tone, voice, style, word choice (1 bullet for each of these)
-# - Rewrite the original text and add bolding where the back translation uses a different word
-#     """
-#     user_text_evaluate = f"""
-# # Original Text:
-
-# {unit_text}
-
-# # Back Translated Text:
-
-# {back_translated_text}
-# """
-#     response_evaluate = client.chat.completions.create(
-#         model="gpt-4o",
-#         messages=[
-#             {"role": "system", "content": system_text_evaluate},
-#             {"role": "user", "content": user_text_evaluate},
-#         ],
-#         max_tokens=1024,
-#         temperature=0.3,
-#     )
-#     return response_evaluate.choices[0].message.content.strip()

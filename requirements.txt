@@ -3,6 +3,6 @@ PyMuPDF==1.23.21
 openai==1.9.0
 python-docx==1.1.0
 python-pptx==0.6.23
+# six==1.16.0
+# textract==1.6.5
 tenacity==8.2.3
-textract==1.6.5
-six==1.12.0

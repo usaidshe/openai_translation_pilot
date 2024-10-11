@@ -4,6 +4,7 @@ from openai import OpenAI
 import os
 import docx
 from docx import Document
+from docx.shared import Pt
 import io
 from pptx import Presentation
 # import textract  # For .doc and .ppt files
@@ -123,81 +124,6 @@ def initialize_openai_client(api_key: str) -> OpenAI:
     """Initialize OpenAI client"""
     return OpenAI(api_key=api_key)
 
-def translate_text(client: OpenAI, language: str, unit_text: str) -> str:
-    """Translate the given text to the specified language"""
-    system_text_translate = "You are an expert at translating languages. A user will provide a language and text. You will translate that text into the language provided."
-    user_text_translate = f"""
-# Instructions
-
-Translate the below text to: {language}
-
-# Text: 
-
-{unit_text}
-"""
-    response_translate = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": system_text_translate},
-            {"role": "user", "content": user_text_translate},
-        ],
-        max_tokens=4096,
-        temperature=0.3,
-    )
-    return response_translate.choices[0].message.content.strip()
-
-def back_translate_text(client: OpenAI, translated_text: str) -> str:
-    """Translate the given text back to English"""
-    system_text_back_translate = "You are an expert at translating languages. A user will provide text in a foreign language, and you will translate it back to English."
-    user_text_back_translate = f"""
-# Instructions
-
-Translate the below text back to English.
-
-# Text: 
-
-{translated_text}
-"""
-    response_back_translate = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": system_text_back_translate},
-            {"role": "user", "content": user_text_back_translate},
-        ],
-        max_tokens=4096,
-        temperature=0.3,
-    )
-    return response_back_translate.choices[0].message.content.strip()
-
-def evaluate_text(client: OpenAI, unit_text: str, back_translated_text: str) -> str:
-    """Evaluate the differences between the original and back-translated text"""
-    system_text_evaluate = "You are an expert linguist. Compare the original English text with the back-translated English text and describe any differences in meaning, tone, or content."
-    user_text_evaluate = f"""
-# Instructions
-
-Below I have an original text in English, and a back translated text in English. Provide the following: 
-- A bulleted list that briefly details how accurate the back translation is on tone, voice, style, word choice (1 bullet for each of these)
-- Rewrite the original text and add bolding where the back translation uses a different word
-
-# Original Text:
-
-{unit_text}
-
-# Back Translated Text:
-
-{back_translated_text}
-"""
-    response_evaluate = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": system_text_evaluate},
-            {"role": "user", "content": user_text_evaluate},
-        ],
-        max_tokens=1024,
-        temperature=0.3,
-    )
-    return response_evaluate.choices[0].message.content.strip()
-
 @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(6))
 def openai_chatbot(client, system_content, user_content, temperature=0.3):
     response = client.chat.completions.create(
@@ -240,8 +166,21 @@ def sanitize_text(text: str) -> str:
     """Remove non-XML compatible characters from the text."""
     return ''.join(c for c in text if c.isprintable())
 
+def add_markdown_paragraph(doc, text):
+    """Add a paragraph to the document with markdown-style bolding."""
+    paragraph = doc.add_paragraph()
+    parts = text.split('**')
+    for i, part in enumerate(parts):
+        run = paragraph.add_run(part)
+        if i % 2 == 1:  # Odd indices are between pairs of asterisks
+            run.bold = True
+
 def main():
     if check_password():
+        # Initialize OpenAI client
+        api_key = st.secrets["OPENAI_API_KEY"]  # Ensure you have this key in your Streamlit secrets
+        client = initialize_openai_client(api_key)
+
         # File uploader to allow users to upload multiple file types
         uploaded_file = st.file_uploader(
             "Upload a Document",
@@ -265,29 +204,60 @@ def main():
                     st.error("Unsupported file type or failed to extract text.")
                     return
 
-                st.success(f"Extracted {len(units)} units from the {file_type} document.")
+                system_text_translate = f"You are an expert at translating languages. Translate the text into {language}."
+                user_contents_translate = [f"""
+                # Instructions
 
-                # Initialize OpenAI API
-                OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
-                client = initialize_openai_client(OPENAI_API_KEY)
+                Translate the below text to {language}.
 
-                # Prepare system messages
-                system_text_translate = "You are an expert at translating languages. A user will provide a language and text. You will translate that text into the language provided."
-                system_text_back_translate = "You are an expert at translating languages. A user will provide text in a foreign language, and you will translate it back to English."
-                system_text_evaluate = "You are an expert linguist. Compare the original English text with the back-translated English text and describe any differences in meaning, tone, or content."
+                # Text: 
 
-                # Prepare user contents for parallel processing
-                user_contents_translate = [f"Translate the below text to: {language}\n\n# Text:\n\n{unit_text}" for _, unit_text in units]
-                user_contents_back_translate = [f"Translate the below text back to English.\n\n# Text:\n\n{translated_text}" for translated_text in user_contents_translate]
-                user_contents_evaluate = [f"Compare the following two texts and evaluate the differences in meaning, tone, or content.\n\n# Original Text:\n\n{unit_text}\n\n# Back Translated Text:\n\n{back_translated_text}" for unit_text, back_translated_text in zip(user_contents_translate, user_contents_back_translate)]
+                {unit[1]}
+
+                """ for unit in units]
 
                 # Process translations in parallel
                 st.write("# Step 1: Translation")
                 translated_texts = parallel_process_openai_chatbot(client, system_text_translate, user_contents_translate)
+
+                # Prepare for back translation
+                system_text_back_translate = "You are an expert at translating languages. A user will provide text in a foreign language, and you will translate it back to English."
+                user_contents_back_translate = [f"""
+                # Instructions
+
+                Translate the below text back to English.
+
+                # Text: 
+
+                {translated_text}
+                """ for translated_text in translated_texts]
+
+                # Process back translations in parallel
                 st.write("# Step 2: Back Translation (To English)")
                 back_translated_texts = parallel_process_openai_chatbot(client, system_text_back_translate, user_contents_back_translate)
+
+                # Prepare user contents for evaluation
+                system_text_evaluate = """
+                Below I have an original text in English, and a back translated text in English. Provide the following: 
+                - A bulleted list that briefly details how accurate the back translation is on tone, voice, style, word choice (1 bullet for each of these)
+                - Rewrite the original text and add bolding where the back translation uses a different word
+                """
+                user_contents_evaluate = [f"""
+                # Original Text:
+
+                {unit_text}
+
+                # Back Translated Text:
+
+                {back_translated_text}
+                """ for (unit_text, back_translated_text) in zip([unit[1] for unit in units], back_translated_texts)]
+
+                # Process evaluations in parallel
                 st.write("# Step 3: Compare Original + Back Translations")
                 evaluations = parallel_process_openai_chatbot(client, system_text_evaluate, user_contents_evaluate)
+
+                # st.write(system_text_evaluate)
+                # st.write(user_contents_evaluate)
 
                 # Initialize Word Document
                 docx_document = Document()
@@ -326,34 +296,24 @@ def main():
                     # Add to Word Document
                     docx_document.add_heading(f"{unit_heading} of {len(units)}", level=2)
                     docx_document.add_heading("Original Text:", level=3)
-                    docx_document.add_paragraph(sanitized_unit_text)
+                    add_markdown_paragraph(docx_document, sanitized_unit_text)
 
                     # Display and add Translated Text
-                    # st.markdown("**Translated Text:**")
                     translated_text = translated_texts[idx - 1]  # Use precomputed translated text
-                    # with st.expander("Translated Text"):
-                    #     st.text(translated_text)
                     docx_document.add_heading("Translated Text:", level=3)
-                    docx_document.add_paragraph(translated_text)
+                    add_markdown_paragraph(docx_document, translated_text)
 
                     # Display and add Back Translated Text
-                    # st.markdown("**Back Translated to English:**")
                     back_translated_text = back_translated_texts[idx - 1]  # Use precomputed back-translated text
-                    # with st.expander("Back Translated Text"):
-                    #     st.text(back_translated_text)
                     docx_document.add_heading("Back Translated Text:", level=3)
-                    docx_document.add_paragraph(back_translated_text)
+                    add_markdown_paragraph(docx_document, back_translated_text)
 
                     # Display and add Evaluation
-                    # st.markdown("**Evaluation of Differences:**")
                     evaluation = evaluations[idx - 1]  # Use precomputed evaluation
-                    # with st.expander("Evaluation"):
-                    #     st.text(evaluation)
                     docx_document.add_heading("Evaluation of Differences:", level=3)
-                    docx_document.add_paragraph(evaluation)
+                    add_markdown_paragraph(docx_document, evaluation)
 
                     docx_document.add_page_break()  # Add a page break after each unit's content
-                    # st.markdown("---")  # Separator between units
 
                 # After processing all units, provide the download button
                 # Save the Word document to a BytesIO buffer
@@ -376,3 +336,78 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+# def translate_text(client: OpenAI, language: str, unit_text: str) -> str:
+#     """Translate the given text to the specified language"""
+#     system_text_translate = f"You are an expert at translating languages. Translate the text into {language}."
+#     user_text_translate = f"""
+# # Instructions
+
+# Translate the below text to {language}.
+
+# # Text: 
+
+# {unit_text}
+# """
+#     response_translate = client.chat.completions.create(
+#         model="gpt-4o",
+#         messages=[
+#             {"role": "system", "content": system_text_translate},
+#             {"role": "user", "content": user_text_translate},
+#         ],
+#         max_tokens=4096,
+#         temperature=0.3,
+#     )
+#     return response_translate.choices[0].message.content.strip()
+
+# def back_translate_text(client: OpenAI, translated_text: str) -> str:
+#     """Translate the given text back to English"""
+#     system_text_back_translate = "You are an expert at translating languages. A user will provide text in a foreign language, and you will translate it back to English."
+#     user_text_back_translate = f"""
+# # Instructions
+
+# Translate the below text back to English.
+
+# # Text: 
+
+# {translated_text}
+# """
+#     response_back_translate = client.chat.completions.create(
+#         model="gpt-4o",
+#         messages=[
+#             {"role": "system", "content": system_text_back_translate},
+#             {"role": "user", "content": user_text_back_translate},
+#         ],
+#         max_tokens=4096,
+#         temperature=0.3,
+#     )
+#     return response_back_translate.choices[0].message.content.strip()
+
+# def evaluate_text(client: OpenAI, unit_text: str, back_translated_text: str) -> str:
+#     """Evaluate the differences between the original and back-translated text"""
+#     system_text_evaluate = """
+# Below I have an original text in English, and a back translated text in English. Provide the following: 
+# - A bulleted list that briefly details how accurate the back translation is on tone, voice, style, word choice (1 bullet for each of these)
+# - Rewrite the original text and add bolding where the back translation uses a different word
+#     """
+#     user_text_evaluate = f"""
+# # Original Text:
+
+# {unit_text}
+
+# # Back Translated Text:
+
+# {back_translated_text}
+# """
+#     response_evaluate = client.chat.completions.create(
+#         model="gpt-4o",
+#         messages=[
+#             {"role": "system", "content": system_text_evaluate},
+#             {"role": "user", "content": user_text_evaluate},
+#         ],
+#         max_tokens=1024,
+#         temperature=0.3,
+#     )
+#     return response_evaluate.choices[0].message.content.strip()

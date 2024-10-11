@@ -234,6 +234,10 @@ def parallel_process_openai_chatbot(client, system_content, user_contents):
                 progress_text.text(f"Processing unit {count} of {total}...")
     return results
 
+def sanitize_text(text: str) -> str:
+    """Remove non-XML compatible characters from the text."""
+    return ''.join(c for c in text if c.isprintable())
+
 def main():
     if check_password():
         # File uploader to allow users to upload multiple file types
@@ -314,10 +318,13 @@ def main():
                     # with st.expander("Original Text"):
                     #     st.text(unit_text)
 
+                    # Sanitize the text before adding it to the document
+                    sanitized_unit_text = sanitize_text(unit_text)
+
                     # Add to Word Document
                     docx_document.add_heading(f"{unit_heading} of {len(units)}", level=2)
                     docx_document.add_heading("Original Text:", level=3)
-                    docx_document.add_paragraph(unit_text)
+                    docx_document.add_paragraph(sanitized_unit_text)
 
                     # Display and add Translated Text
                     # st.markdown("**Translated Text:**")

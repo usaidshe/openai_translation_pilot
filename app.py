@@ -6,7 +6,7 @@ import docx
 from docx import Document
 import io
 from pptx import Presentation
-import textract  # For .doc and .ppt files
+# import textract  # For .doc and .ppt files
 import tempfile
 from typing import List, Tuple
 import subprocess
@@ -74,36 +74,36 @@ def extract_text_from_pptx(file_stream) -> List[Tuple[int, str]]:
     return slides
 
 # Updated extract_text_from_doc function
-def extract_text_from_doc(file_stream) -> List[Tuple[int, str]]:
-    """Extract text from DOC using textract, return list of (page_num, text)"""
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".doc") as tmp:
-        tmp.write(file_stream.read())
-        tmp_path = tmp.name
-    try:
-        raw_text = textract.process(tmp_path).decode('utf-8')
+# def extract_text_from_doc(file_stream) -> List[Tuple[int, str]]:
+#     """Extract text from DOC using textract, return list of (page_num, text)"""
+#     with tempfile.NamedTemporaryFile(delete=False, suffix=".doc") as tmp:
+#         tmp.write(file_stream.read())
+#         tmp_path = tmp.name
+#     try:
+#         raw_text = textract.process(tmp_path).decode('utf-8')
         
-        # Split the text by manual page breaks
-        pages = raw_text.split('\f')  # \f is the form feed character representing a page break
+#         # Split the text by manual page breaks
+#         pages = raw_text.split('\f')  # \f is the form feed character representing a page break
         
-        # If no manual page breaks are found, use a heuristic to divide text
-        if len(pages) == 1:
-            paragraphs = raw_text.split('\n\n')  # Assuming paragraphs are separated by double newlines
-            pages = []
-            page_text = []
-            for para in paragraphs:
-                page_text.append(para.strip())
-                # Heuristic: Assume a new page starts after a certain number of paragraphs
-                if len(page_text) >= 10:  # Adjust this number based on typical page length
-                    pages.append('\n\n'.join(page_text))
-                    page_text = []
-            if page_text:
-                pages.append('\n\n'.join(page_text))
+#         # If no manual page breaks are found, use a heuristic to divide text
+#         if len(pages) == 1:
+#             paragraphs = raw_text.split('\n\n')  # Assuming paragraphs are separated by double newlines
+#             pages = []
+#             page_text = []
+#             for para in paragraphs:
+#                 page_text.append(para.strip())
+#                 # Heuristic: Assume a new page starts after a certain number of paragraphs
+#                 if len(page_text) >= 10:  # Adjust this number based on typical page length
+#                     pages.append('\n\n'.join(page_text))
+#                     page_text = []
+#             if page_text:
+#                 pages.append('\n\n'.join(page_text))
         
-        # Create a list of (page_num, text) tuples
-        page_texts = [(i + 1, page.strip()) for i, page in enumerate(pages) if page.strip()]
-        return page_texts
-    finally:
-        os.remove(tmp_path)
+#         # Create a list of (page_num, text) tuples
+#         page_texts = [(i + 1, page.strip()) for i, page in enumerate(pages) if page.strip()]
+#         return page_texts
+#     finally:
+#         os.remove(tmp_path)
 
 def extract_text(uploaded_file) -> Tuple[str, List[Tuple[int, str]]]:
     """Determine file type and extract text accordingly, return file type and list of (unit_num, text)"""
@@ -112,8 +112,8 @@ def extract_text(uploaded_file) -> Tuple[str, List[Tuple[int, str]]]:
         return ("PDF", extract_text_from_pdf(uploaded_file))
     elif file_extension == ".docx":
         return ("DOCX", extract_text_from_docx(uploaded_file))
-    elif file_extension == ".doc":
-        return ("DOC", extract_text_from_doc(uploaded_file))
+    # elif file_extension == ".doc":
+    #     return ("DOC", extract_text_from_doc(uploaded_file))
     elif file_extension == ".pptx":
         return ("PPTX", extract_text_from_pptx(uploaded_file))
     else:
@@ -239,7 +239,7 @@ def main():
         # File uploader to allow users to upload multiple file types
         uploaded_file = st.file_uploader(
             "Upload a Document",
-            type=["pdf", "doc", "docx", "pptx"]
+            type=["pdf", "docx", "pptx"]
         )
 
         # Input for selecting the language for translation

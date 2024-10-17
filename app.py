@@ -132,13 +132,15 @@ def sanitize_text(text: str) -> str:
     return ''.join(c for c in text if c.isprintable())
 
 def add_markdown_paragraph(doc, text):
-    """Add a paragraph to the document with markdown-style bolding."""
-    paragraph = doc.add_paragraph()
-    parts = text.split('**')
-    for i, part in enumerate(parts):
-        run = paragraph.add_run(part)
-        if i % 2 == 1:  # Odd indices are between pairs of asterisks
-            run.bold = True
+    """Add a paragraph to the document with markdown-style bolding and respect line breaks."""
+    parts = text.split('\n')
+    for line in parts:
+        paragraph = doc.add_paragraph()
+        bold_parts = line.split('**')
+        for i, part in enumerate(bold_parts):
+            run = paragraph.add_run(part)
+            if i % 2 == 1:  # Odd indices are between pairs of asterisks
+                run.bold = True
 
 def main():
     if check_password():
@@ -240,10 +242,10 @@ def main():
                     else:
                         unit_heading = f"Unit {unit_num}"
 
-                    # Sanitize the text before adding it to the document
-                    sanitized_unit_text = sanitize_text(unit_text)
-
                     # Add to Word Document
+
+                    # Add original translation
+                    sanitized_unit_text = sanitize_text(unit_text)
                     docx_document.add_heading(f"{unit_heading} of {len(units)}", level=2)
                     docx_document.add_heading("Original Text:", level=3)
                     add_markdown_paragraph(docx_document, sanitized_unit_text)
